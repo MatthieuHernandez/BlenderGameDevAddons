@@ -4,7 +4,7 @@ bl_info = {
     "version": (1, 0, 0),
     "blender": (4, 2, 0),
     "location": "View3D > Sidebar > FBX Export",
-    "description": "Export a low FBX and a high FBX when Multiresolution is present",
+    "description": "Export selected objects together as low and high FBX files",
     "category": "Import-Export",
 }
 
@@ -13,68 +13,56 @@ import os
 from bpy.types import Operator, Panel
 
 
+DEFAULT_OUTPUT_FOLDER = "Export"
+
+
 class EXPORT_OT_low_high_fbx(Operator):
     bl_idname = "export_mesh.low_high_fbx"
     bl_label = "Export Low + High FBX"
-    bl_description = "Export a low FBX for each selected mesh and a high FBX for meshes with Multiresolution"
+    bl_description = "Export all selected objects together as low and high FBX files"
     bl_options = {'REGISTER'}
 
     @classmethod
     def poll(cls, context):
-        return context.mode == 'OBJECT' and any(obj.type == 'MESH' for obj in context.selected_objects)
+        return context.mode == 'OBJECT' and bool(context.selected_objects)
 
     def execute(self, context):
         if not bpy.data.filepath:
             self.report({'ERROR'}, "Save your .blend file before exporting")
             return {'CANCELLED'}
 
-        export_dir = os.path.join(os.path.dirname(bpy.data.filepath), "Export")
-        previous_selection = list(context.selected_objects)
-        previous_active = context.view_layer.objects.active
-        meshes = [obj for obj in previous_selection if obj.type == 'MESH']
-        file_count = 0
+        output_folder = context.scene.low_high_fbx_output_folder or DEFAULT_OUTPUT_FOLDER
+        export_dir = os.path.join(os.path.dirname(bpy.data.filepath), bpy.path.abspath(output_folder))
+        selection = context.selected_objects
+        active = context.view_layer.objects.active
+        fallback_name = (active if active in selection else selection[0]).name
+        name = bpy.path.clean_name(context.scene.low_high_fbx_filename.strip() or fallback_name)
 
         try:
             os.makedirs(export_dir, exist_ok=True)
-            bpy.ops.object.select_all(action='DESELECT')
-            for obj in meshes:
-                obj.select_set(True)
-                context.view_layer.objects.active = obj
-                file_count += self.export_mesh(context, obj, export_dir)
-                obj.select_set(False)
+            self.export_selection(context, selection, export_dir, name)
         except Exception as exc:
             self.report({'ERROR'}, str(exc))
             return {'CANCELLED'}
-        finally:
-            bpy.ops.object.select_all(action='DESELECT')
-            for selected in previous_selection:
-                selected.select_set(True)
-            context.view_layer.objects.active = previous_active
-            context.view_layer.update()
 
-        self.report({'INFO'}, f"Exported {file_count} FBX file(s) to {export_dir}")
+        self.report({'INFO'}, f"Exported {name}_low.fbx and {name}_high.fbx to {export_dir}")
         return {'FINISHED'}
 
-    def export_mesh(self, context, obj, export_dir):
-        modifiers = [m for m in obj.modifiers if m.type == 'MULTIRES']
-        variants = [("low", False)]
-        if modifiers:
-            variants.append(("high", True))
-
+    def export_selection(self, context, selection, export_dir, name):
+        modifiers = [mod for obj in selection for mod in obj.modifiers if mod.type == 'MULTIRES']
         states = [(m, m.show_viewport, m.show_render) for m in modifiers]
 
         try:
-            for suffix, enabled in variants:
+            for suffix, enabled in (("low", False), ("high", True)):
                 for mod in modifiers:
                     mod.show_viewport = enabled
                     mod.show_render = enabled
 
                 context.view_layer.update()
-                filepath = os.path.join(export_dir, f"{bpy.path.clean_name(obj.name)}_{suffix}.fbx")
+                filepath = os.path.join(export_dir, f"{name}_{suffix}.fbx")
                 result = bpy.ops.export_scene.fbx(
                     filepath=filepath,
                     use_selection=True,
-                    object_types={'MESH'},
                     use_mesh_modifiers=True,
                     use_mesh_modifiers_render=False,
                     bake_anim=False,
@@ -87,8 +75,6 @@ class EXPORT_OT_low_high_fbx(Operator):
                 mod.show_render = render
             context.view_layer.update()
 
-        return len(variants)
-
 
 class VIEW3D_PT_low_high_fbx(Panel):
     bl_label = "Low/High FBX Exporter"
@@ -99,14 +85,25 @@ class VIEW3D_PT_low_high_fbx(Panel):
 
     def draw(self, context):
         layout = self.layout
+        layout.prop(context.scene, "low_high_fbx_filename")
+        layout.prop(context.scene, "low_high_fbx_output_folder")
         layout.operator("export_mesh.low_high_fbx", icon='EXPORT')
-        layout.label(text="Output: //Export/")
 
 
 classes = (EXPORT_OT_low_high_fbx, VIEW3D_PT_low_high_fbx)
 
 
 def register():
+    bpy.types.Scene.low_high_fbx_output_folder = bpy.props.StringProperty(
+        name="Output Folder",
+        description="Folder for both FBX files. Relative paths start from the blend file's folder",
+        subtype='DIR_PATH',
+        default=DEFAULT_OUTPUT_FOLDER,
+    )
+    bpy.types.Scene.low_high_fbx_filename = bpy.props.StringProperty(
+        name="File Name",
+        description="Base name for both FBX files, without the suffix or extension. Leave blank to use the selected object's name",
+    )
     for cls in classes:
         bpy.utils.register_class(cls)
 
@@ -114,6 +111,8 @@ def register():
 def unregister():
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
+    del bpy.types.Scene.low_high_fbx_filename
+    del bpy.types.Scene.low_high_fbx_output_folder
 
 
 if __name__ == "__main__":

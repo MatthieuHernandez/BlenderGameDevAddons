@@ -18,12 +18,14 @@ A collection of custom Blender add-ons made to simplify video game development.
 
 ### Low/High FBX Exporter
 
-Exports a `_low.fbx` file for each selected mesh with Multiresolution disabled. Meshes with a Multiresolution modifier also get a `_high.fbx` file with Multiresolution enabled.
+Exports the selection together in two files. The `_low.fbx` file has Multiresolution disabled, and the `_high.fbx` file has it enabled.
 
-The files are saved in the `Export` folder next to the `.blend` file.
+By default, the files are saved in the `Export` folder next to the `.blend` file.
 
 #### Usage
 
 1. Select one or more meshes in Object Mode.
 2. Press `N` in the 3D Viewport to open the sidebar.
-3. Open the **FBX Export** tab and click **Export Low + High FBX**.
+3. In the **FBX Export** tab, enter a base name in **File Name**, such as `Lantern`. Leave the field blank to use the active selected object's name or the first selected object's name.
+4. Set **Output Folder** if you want a different destination. Relative paths are resolved from the folder containing the `.blend` file.
+5. Click **Export Low + High FBX**.
