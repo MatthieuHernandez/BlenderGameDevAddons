@@ -1,6 +1,6 @@
 bl_info = {
     "name": "Low/High FBX Exporter",
-    "author": "Community",
+    "author": "MatthieuHernandez",
     "version": (1, 0, 0),
     "blender": (4, 2, 0),
     "location": "View3D > Sidebar > FBX Export",
