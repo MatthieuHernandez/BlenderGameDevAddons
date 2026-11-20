@@ -26,6 +26,6 @@ By default, the files are saved in the `Export` folder next to the `.blend` file
 
 1. Select one or more meshes in Object Mode.
 2. Press `N` in the 3D Viewport to open the sidebar.
-3. In the **FBX Export** tab, enter a base name in **File Name**, such as `Lantern`. Leave the field blank to use the active selected object's name or the first selected object's name.
+3. In the **FBX Export** tab, enter a base name in **File Name**. Leave the field blank to use the active selected object's name or the first selected object's name.
 4. Set **Output Folder** if you want a different destination. Relative paths are resolved from the folder containing the `.blend` file.
 5. Click **Export Low + High FBX**.
