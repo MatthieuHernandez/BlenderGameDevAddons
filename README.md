@@ -5,8 +5,10 @@
 1. Download `BlenderGameDevAddons_vX.Y.Z.zip` from the [latest GitHub release](https://github.com/MatthieuHernandez/BlenderGameDevAddons/releases/latest).
 2. Drag and drop the ZIP into Blender and confirm the installation. The archive includes **THREN Tools** (`thren_tools`) and **Send to Unreal** (`send2ue`).
 3. Restart Blender.
-4. To use **Push Mesh to Unreal**, make sure the bundled **Send to Unreal** add-on is enabled in Blender.
+4. To use **Push Mesh to Unreal**, follow the [Send to Unreal Quickstart](https://poly-hammer.github.io/BlenderTools/send2ue/introduction/quickstart/) to configure the THREN Unreal Engine project.
 5. Copy `Unreal/Content/Python/thren_mesh_import.py` to `Content/Python/` in the THREN Unreal project. Enable **Python Editor Script Plugin**, **Editor Scripting Utilities**, and **Enable Remote Execution**.
+
+Steps 4 and 5 are a one-time setup for each Unreal project. You can skip both steps if the project is already configured.
 
 ## THREN Tools
 
