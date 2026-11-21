@@ -1,16 +1,6 @@
-bl_info = {
-    "name": "Low/High FBX Exporter",
-    "author": "MatthieuHernandez",
-    "version": (1, 0, 0),
-    "blender": (4, 2, 0),
-    "location": "View3D > Sidebar > FBX Export",
-    "description": "Export selected objects together as low and high FBX files",
-    "category": "Import-Export",
-}
-
 import bpy
 import os
-from bpy.types import Operator, Panel
+from bpy.types import Operator
 
 
 DEFAULT_OUTPUT_FOLDER = "Export"
@@ -18,7 +8,7 @@ DEFAULT_OUTPUT_FOLDER = "Export"
 
 class EXPORT_OT_low_high_fbx(Operator):
     bl_idname = "export_mesh.low_high_fbx"
-    bl_label = "Export Low + High FBX"
+    bl_label = "Export Low/High FBX"
     bl_description = "Export all selected objects together as low and high FBX files"
     bl_options = {'REGISTER'}
 
@@ -76,23 +66,6 @@ class EXPORT_OT_low_high_fbx(Operator):
             context.view_layer.update()
 
 
-class VIEW3D_PT_low_high_fbx(Panel):
-    bl_label = "Low/High FBX Exporter"
-    bl_idname = "VIEW3D_PT_low_high_fbx"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = "FBX Export"
-
-    def draw(self, context):
-        layout = self.layout
-        layout.prop(context.scene, "low_high_fbx_filename")
-        layout.prop(context.scene, "low_high_fbx_output_folder")
-        layout.operator("export_mesh.low_high_fbx", icon='EXPORT')
-
-
-classes = (EXPORT_OT_low_high_fbx, VIEW3D_PT_low_high_fbx)
-
-
 def register():
     bpy.types.Scene.low_high_fbx_output_folder = bpy.props.StringProperty(
         name="Output Folder",
@@ -104,16 +77,10 @@ def register():
         name="File Name",
         description="Base name for both FBX files, without the suffix or extension. Leave blank to use the selected object's name",
     )
-    for cls in classes:
-        bpy.utils.register_class(cls)
+    bpy.utils.register_class(EXPORT_OT_low_high_fbx)
 
 
 def unregister():
-    for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
+    bpy.utils.unregister_class(EXPORT_OT_low_high_fbx)
     del bpy.types.Scene.low_high_fbx_filename
     del bpy.types.Scene.low_high_fbx_output_folder
-
-
-if __name__ == "__main__":
-    register()
