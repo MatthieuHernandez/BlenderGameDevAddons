@@ -16,7 +16,7 @@ A collection of custom Blender add-ons made to simplify video game development.
 
 ## Add-ons
 
-### Low/High FBX Exporter
+### Low/High FBX Exporter (Blender → Substance 3D Painter)
 
 Exports the selection together in two files. The `_low.fbx` file has Multiresolution disabled, and the `_high.fbx` file has it enabled.
 
