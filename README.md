@@ -39,3 +39,8 @@ Combines the selected meshes and creates or updates a single Static Mesh in the 
 5. Click **Push to Unreal**. Save the Blender file again after the first push to persist the object's THREN ID. For later pushes, keep the same first mesh alphabetically, export name and destination.
 
 Use letters, digits and underscores for the export name and prop folder. The exporter replaces unsupported characters in material slot names with underscores.
+
+
+---
+#### Package the main branch
+`git archive --format=zip --output=BlenderGameDevAddons_vX.Y.Z.zip HEAD send2ue thren_tools`
