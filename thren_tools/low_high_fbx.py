@@ -1,6 +1,7 @@
 import bpy
 import os
 from bpy.types import Operator
+from unittest.mock import patch
 
 
 DEFAULT_OUTPUT_FOLDER = "Export"
@@ -39,8 +40,20 @@ class EXPORT_OT_low_high_fbx(Operator):
         return {'FINISHED'}
 
     def export_selection(self, context, selection, export_dir, name):
+        from io_scene_fbx import export_fbx_bin
+
         modifiers = [mod for obj in selection for mod in obj.modifiers if mod.type == 'MULTIRES']
         states = [(m, m.show_viewport, m.show_render) for m in modifiers]
+        write_object = export_fbx_bin.fbx_data_object_elements
+
+        def write_suffixed_object(root, obj, scene_data):
+            # This is the exporter wrapper's name, independent of the Blender object.
+            original_name = obj.name
+            obj.name = f"{original_name}_{suffix}"
+            try:
+                return write_object(root, obj, scene_data)
+            finally:
+                obj.name = original_name
 
         try:
             for suffix, enabled in (("low", False), ("high", True)):
@@ -50,13 +63,14 @@ class EXPORT_OT_low_high_fbx(Operator):
 
                 context.view_layer.update()
                 filepath = os.path.join(export_dir, f"{name}_{suffix}.fbx")
-                result = bpy.ops.export_scene.fbx(
-                    filepath=filepath,
-                    use_selection=True,
-                    use_mesh_modifiers=True,
-                    use_mesh_modifiers_render=False,
-                    bake_anim=False,
-                )
+                with patch.object(export_fbx_bin, "fbx_data_object_elements", write_suffixed_object):
+                    result = bpy.ops.export_scene.fbx(
+                        filepath=filepath,
+                        use_selection=True,
+                        use_mesh_modifiers=True,
+                        use_mesh_modifiers_render=False,
+                        bake_anim=False,
+                    )
                 if 'FINISHED' not in result:
                     raise RuntimeError(f"FBX export failed: {filepath}")
         finally:

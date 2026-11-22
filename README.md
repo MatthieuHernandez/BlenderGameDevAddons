@@ -42,5 +42,13 @@ Use letters, digits and underscores for the export name and prop folder. The exp
 
 
 ---
-#### Package the main branch
-`git archive --format=zip --output=BlenderGameDevAddons_vX.Y.Z.zip HEAD send2ue thren_tools`
+#### Package the add-on (for development purposes only)
+```
+git archive --format=zip --output=BlenderGameDevAddons_vX.Y.Z.zip HEAD send2ue thren_tools
+```
+
+or
+
+```
+Compress-Archive -Path .\send2ue, .\thren_tools -DestinationPath .\BlenderGameDevAddons_vX.Y.Z.zip -Force
+```
