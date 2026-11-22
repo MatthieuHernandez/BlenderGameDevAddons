@@ -10,9 +10,7 @@ import unreal
 
 ASSET_TAG = "THRENAssetId"
 ROOT = "/Game/THREN"
-DESTINATION = re.compile(
-    rf"{ROOT}/(?:Shared/Meshes|World/WitchLair/Environment/Props/[A-Za-z0-9_]+/Meshes)"
-)
+DESTINATION = re.compile(rf"{ROOT}(?:/[^/\\:\x00-\x1f]+)*")
 
 
 def _find_existing(asset_id, requested_path):
@@ -68,7 +66,9 @@ def push(manifest_path):
     data = json.loads(manifest.read_text(encoding="utf-8"))
     asset_id = str(uuid.UUID(data["asset_id"]))
     name, folder = data["name"], data["destination"]
-    if not re.fullmatch(r"[A-Za-z0-9_]+", name) or not DESTINATION.fullmatch(folder):
+    if (not re.fullmatch(r"[A-Za-z0-9_]+", name)
+            or not DESTINATION.fullmatch(folder)
+            or {".", ".."}.intersection(folder.split("/"))):
         raise ValueError(f"Invalid THREN mesh destination: {folder}/{name}")
     source = manifest.with_suffix(".fbx")
     if source.stem != name or not source.is_file():

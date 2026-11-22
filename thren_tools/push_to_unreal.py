@@ -10,43 +10,48 @@ import addon_utils
 import bpy
 
 
-SHARED_FOLDER = "/Game/THREN/Shared/Meshes"
-WITCH_LAIR_PROPS = "/Game/THREN/World/WitchLair/Environment/Props"
+THREN_ROOT = "/Game/THREN"
+SHARED_FOLDER = f"{THREN_ROOT}/Shared/Meshes"
+WITCH_LAIR_PROPS = f"{THREN_ROOT}/World/WitchLair/Environment/Props"
+FOREST_FOLDER = f"{THREN_ROOT}/World/Forest"
+DESTINATIONS = {
+    'SHARED': ("Shared", SHARED_FOLDER, "thren_shared_folder"),
+    'WITCH_LAIR': ("WitchLair", WITCH_LAIR_PROPS, "thren_prop_folder"),
+    'FOREST': ("Forest", FOREST_FOLDER, "thren_forest_folder"),
+}
 ASSET_ID = "thren_asset_id"
 
 
-def destination_folder(scene, mesh_name=""):
-    if scene.thren_destination == 'SHARED':
-        return SHARED_FOLDER
-    prop = scene.thren_prop_folder.strip() or mesh_name.removeprefix("SM_")
-    if prop and not re.fullmatch(r"[A-Za-z0-9_]+", prop):
-        raise ValueError("Use letters, digits and underscores in the prop folder")
-    return f"{WITCH_LAIR_PROPS}/{prop or '<Prop_name>'}/Meshes"
+def destination_folder(scene):
+    _, default_base, folder_property = DESTINATIONS[scene.thren_destination]
+    base = scene.thren_selected_directory or default_base
+    folder = getattr(scene, folder_property).strip()
+    if folder and not re.fullmatch(r"[A-Za-z0-9_]+", folder):
+        raise ValueError("Use letters, digits and underscores in Folder Name")
+
+    if folder:
+        return f"{base}/{folder}/Meshes"
+    return base if base.rsplit("/", 1)[-1].casefold() == "meshes" else f"{base}/Meshes"
 
 
-def push_name(context):
-    anchor = reference_mesh(context)
-    return context.scene.thren_push_filename.strip() or (anchor.name if anchor is not None else "")
+def content_path(package_path):
+    return "/Content/" + package_path.removeprefix("/Game/")
 
 
-def target(context):
-    if reference_mesh(context) is None:
-        raise ValueError("Select at least one mesh")
-    name = push_name(context)
-    if not re.fullmatch(r"[A-Za-z0-9_]+", name):
-        raise ValueError("Use letters, digits and underscores in the FBX name")
-    folder = destination_folder(context.scene, name)
-    if "<Prop_name>" in folder:
-        raise ValueError("Enter a prop folder name")
-    return folder, name
-
-
-def reference_mesh(context):
-    return min(
+def selected_meshes(context):
+    return sorted(
         (obj for obj in context.selected_objects if obj.type == 'MESH'),
         key=lambda obj: (obj.name.casefold(), obj.name),
-        default=None,
     )
+
+
+def static_mesh_name(obj):
+    name = re.sub(r"[^A-Za-z0-9_]+", "_", obj.name.strip())
+    if name[:3].upper() == "SM_":
+        name = name[3:]
+    if not name.strip("_"):
+        raise ValueError(f"Cannot build a Static Mesh name from {obj.name!r}")
+    return f"SM_{name}"
 
 
 def send2ue_functions(context):
@@ -58,6 +63,64 @@ def send2ue_functions(context):
             transport = importlib.import_module(f"{module}.dependencies.unreal")
             return exporter.export_fbx_file, transport.run_commands
     raise RuntimeError("Install and enable Send to Unreal in Blender")
+
+
+def unreal_content_directory(send):
+    marker = "THREN_CONTENT_DIRECTORY:"
+    response = send([
+        "import json, unreal",
+        "from pathlib import Path",
+        "content = Path(unreal.Paths.project_content_dir()).resolve()",
+        f"print({marker!r} + json.dumps(str(content)))",
+    ])
+    for line in (response or "").splitlines():
+        if line.startswith(marker):
+            return Path(json.loads(line[len(marker):]))
+    raise RuntimeError(response or "Unreal did not return its project Content directory")
+
+
+class THREN_OT_select_unreal_directory(bpy.types.Operator):
+    bl_idname = "thren.select_unreal_directory"
+    bl_label = "Select Directory"
+    bl_description = "Choose an existing directory in the open Unreal project"
+
+    directory: bpy.props.StringProperty(subtype='DIR_PATH', options={'SKIP_SAVE'})
+    filter_folder: bpy.props.BoolProperty(default=True, options={'HIDDEN', 'SKIP_SAVE'})
+    root: bpy.props.StringProperty(options={'HIDDEN', 'SKIP_SAVE'})
+    destination: bpy.props.StringProperty(options={'HIDDEN', 'SKIP_SAVE'})
+
+    def invoke(self, context, event):
+        self.destination = context.scene.thren_destination
+        try:
+            _, send = send2ue_functions(context)
+            _, package_root, _ = DESTINATIONS[self.destination]
+            root = (unreal_content_directory(send) / THREN_ROOT.removeprefix("/Game/")).resolve()
+            if not root.is_dir():
+                raise ValueError(f"Directory unavailable on this computer: {root}")
+        except Exception as error:
+            self.report({'ERROR'}, str(error))
+            return {'CANCELLED'}
+
+        self.root = str(root)
+        start = root / package_root.removeprefix(f"{THREN_ROOT}/")
+        self.directory = str(start if start.is_dir() else root) + os.sep
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
+    def execute(self, context):
+        scene = context.scene
+        try:
+            if not self.root or scene.thren_destination != self.destination:
+                raise ValueError("Open Select Directory again for the current destination")
+            chosen = Path(bpy.path.abspath(self.directory)).resolve()
+            root = Path(self.root)
+            if not chosen.is_dir() or not chosen.is_relative_to(root):
+                raise ValueError(f"Choose an existing directory under {root}")
+            scene.thren_selected_directory = "/".join((THREN_ROOT, *chosen.relative_to(root).parts))
+        except (ValueError, OSError) as error:
+            self.report({'ERROR'}, str(error))
+            return {'CANCELLED'}
+        return {'FINISHED'}
 
 
 def mesh_id(obj):
@@ -72,12 +135,11 @@ def mesh_id(obj):
     return asset_id
 
 
-def export_game_mesh(context, anchor, filepath, export_fbx):
+def export_game_mesh(context, obj, filepath, export_fbx):
     selection = context.selected_objects
-    objects = [obj for obj in selection if obj.type == 'MESH']
-    modifiers = [(mod, mod.show_viewport) for obj in objects for mod in obj.modifiers if mod.type == 'MULTIRES']
-    meshes = []
-    temporary_names = []
+    modifiers = [(mod, mod.show_viewport) for mod in obj.modifiers if mod.type == 'MULTIRES']
+    mesh = None
+    export_obj = None
     export_materials = []
     renamed_materials = []
     active = context.view_layer.objects.active
@@ -86,35 +148,21 @@ def export_game_mesh(context, anchor, filepath, export_fbx):
             mod.show_viewport = False
         context.view_layer.update()
         graph = context.evaluated_depsgraph_get()
-        origin = anchor.evaluated_get(graph).matrix_world.translation.copy()
-        export_objects = []
-        for obj in objects:
-            evaluated = obj.evaluated_get(graph)
-            transform = evaluated.matrix_world.copy()
-            transform.translation -= origin
-            mesh = bpy.data.meshes.new_from_object(evaluated, preserve_all_data_layers=True, depsgraph=graph)
-            meshes.append(mesh)
-            for index, slot in enumerate(evaluated.material_slots):
-                mesh.materials[index] = slot.material
-            copy = bpy.data.objects.new(obj.name, mesh)
-            temporary_names.append(copy.name)
-            export_objects.append((copy, transform))
-            if obj == anchor:
-                export_obj = copy
-
-        for obj in selection:
-            obj.select_set(False)
-        for copy, transform in export_objects:
-            context.scene.collection.objects.link(copy)
-            copy.matrix_world = transform
-            copy.select_set(True)
+        evaluated = obj.evaluated_get(graph)
+        transform = evaluated.matrix_world.copy()
+        transform.translation.zero()
+        mesh = bpy.data.meshes.new_from_object(evaluated, preserve_all_data_layers=True, depsgraph=graph)
+        for index, slot in enumerate(evaluated.material_slots):
+            mesh.materials[index] = slot.material
+        export_obj = bpy.data.objects.new(filepath.stem, mesh)
+        for selected in selection:
+            selected.select_set(False)
+        context.scene.collection.objects.link(export_obj)
+        export_obj.matrix_world = transform
+        export_obj.select_set(True)
         context.view_layer.objects.active = export_obj
         context.view_layer.update()
-        if len(export_objects) > 1 and 'FINISHED' not in bpy.ops.object.join():
-            raise RuntimeError("Could not combine the selected meshes")
-
         # Export only slots represented by polygons in the evaluated geometry.
-        mesh = export_obj.data
         used = sorted({polygon.material_index for polygon in mesh.polygons})
         slots = []
         for index in used:
@@ -158,14 +206,12 @@ def export_game_mesh(context, anchor, filepath, export_fbx):
             raise RuntimeError("FBX export failed")
         return names
     finally:
-        for name in temporary_names:
-            copy = bpy.data.objects.get(name)
-            if copy is not None:
-                bpy.data.objects.remove(copy, do_unlink=True)
-        for obj in selection:
-            obj.select_set(True)
+        if export_obj is not None:
+            bpy.data.objects.remove(export_obj, do_unlink=True)
+        for selected in selection:
+            selected.select_set(True)
         context.view_layer.objects.active = active
-        for mesh in meshes:
+        if mesh is not None:
             bpy.data.meshes.remove(mesh)
         for material in export_materials:
             bpy.data.materials.remove(material)
@@ -182,30 +228,37 @@ class EXPORT_OT_thren_push_to_unreal(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.mode == 'OBJECT' and reference_mesh(context) is not None
+        return context.mode == 'OBJECT' and any(obj.type == 'MESH' for obj in context.selected_objects)
 
     def execute(self, context):
         try:
             if not bpy.data.filepath:
                 raise ValueError("Save your .blend file before pushing")
-            folder, name = target(context)
+            meshes = selected_meshes(context)
+            folder = destination_folder(context.scene)
+            jobs = [(obj, static_mesh_name(obj)) for obj in meshes]
+            if len({name.casefold() for _, name in jobs}) != len(jobs):
+                raise ValueError("Selected objects must produce distinct Static Mesh names")
             export_fbx, send = send2ue_functions(context)
-            anchor = reference_mesh(context)
-            asset_id = mesh_id(anchor)
             with tempfile.TemporaryDirectory(prefix="thren_push_") as directory:
-                fbx = Path(directory) / f"{name}.fbx"
-                manifest = fbx.with_suffix(".json")
-                slots = export_game_mesh(context, anchor, fbx, export_fbx)
-                manifest.write_text(json.dumps({
-                    "asset_id": asset_id, "name": name, "destination": folder, "slots": slots,
-                }, indent=2), encoding="utf-8")
+                manifests = []
+                for obj, name in jobs:
+                    fbx = Path(directory) / f"{name}.fbx"
+                    manifest = fbx.with_suffix(".json")
+                    slots = export_game_mesh(context, obj, fbx, export_fbx)
+                    manifest.write_text(json.dumps({
+                        "asset_id": mesh_id(obj), "name": name, "destination": folder, "slots": slots,
+                    }, indent=2), encoding="utf-8")
+                    manifests.append(str(manifest))
                 response = send([
                     "import runpy, unreal",
                     "from pathlib import Path",
                     "importer = (Path(unreal.Paths.project_content_dir()) / 'Python' / 'thren_mesh_import.py').resolve()",
                     "if not importer.is_file():",
                     "    raise FileNotFoundError(f'Install the THREN importer in the open Unreal project: {importer}')",
-                    f"runpy.run_path(str(importer))['push']({str(manifest)!r})",
+                    "push = runpy.run_path(str(importer))['push']",
+                    f"for manifest in {manifests!r}:",
+                    "    print(push(manifest))",
                     "print('THREN_PUSH_OK')",
                 ])
                 if "THREN_PUSH_OK" not in (response or "").splitlines():
@@ -213,27 +266,34 @@ class EXPORT_OT_thren_push_to_unreal(bpy.types.Operator):
         except Exception as error:
             self.report({'ERROR'}, str(error))
             return {'CANCELLED'}
-        self.report({'INFO'}, f"Pushed {folder}/{name}")
+        self.report({'INFO'}, f"Pushed {len(jobs)} Static Mesh asset(s) to {content_path(folder)}")
         return {'FINISHED'}
 
 
+def clear_selected_directory(scene, _context):
+    scene.thren_selected_directory = ""
+
+
 def register():
+    bpy.types.Scene.thren_selected_directory = bpy.props.StringProperty(options={'HIDDEN'})
     bpy.types.Scene.thren_destination = bpy.props.EnumProperty(
         name="Destination",
-        items=[('SHARED', "Shared", ""), ('WITCH_LAIR', "WitchLair", "")],
+        items=[(key, label, "") for key, (label, _, _) in DESTINATIONS.items()],
+        update=clear_selected_directory,
     )
-    bpy.types.Scene.thren_prop_folder = bpy.props.StringProperty(
-        name="Prop Folder", description="Leave blank to use the FBX name without SM_",
-    )
-    bpy.types.Scene.thren_push_filename = bpy.props.StringProperty(
-        name="File Name",
-        description="Name of the FBX and Static Mesh. Leave blank to use the first selected mesh name alphabetically",
-    )
+    for _, _, folder_property in DESTINATIONS.values():
+        setattr(bpy.types.Scene, folder_property, bpy.props.StringProperty(
+            name="Folder Name",
+            description="Add Folder Name/Meshes under the base directory",
+        ))
+    bpy.utils.register_class(THREN_OT_select_unreal_directory)
     bpy.utils.register_class(EXPORT_OT_thren_push_to_unreal)
 
 
 def unregister():
     bpy.utils.unregister_class(EXPORT_OT_thren_push_to_unreal)
-    del bpy.types.Scene.thren_push_filename
-    del bpy.types.Scene.thren_prop_folder
+    bpy.utils.unregister_class(THREN_OT_select_unreal_directory)
+    for _, _, folder_property in DESTINATIONS.values():
+        delattr(bpy.types.Scene, folder_property)
     del bpy.types.Scene.thren_destination
+    del bpy.types.Scene.thren_selected_directory

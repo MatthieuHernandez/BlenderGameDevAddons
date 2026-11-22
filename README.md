@@ -28,17 +28,18 @@ By default, the files are saved in the `Export` folder next to the `.blend` file
 
 ### Push Mesh to Unreal
 
-Combines the selected meshes and creates or updates a single Static Mesh in the THREN Unreal project. Materials used by the meshes become Unreal material slots.
+Exports each selected mesh to its own FBX and creates or updates one Static Mesh per object in the THREN Unreal project. Each asset uses the Blender object's name with the `SM_` prefix. Each mesh keeps its own pivot, persistent ID and material slots.
 
 #### Usage
 
 1. Open the THREN project in Unreal and keep only that Unreal Editor instance open during the push.
 2. Select one or more meshes in Object Mode.
-3. Press `N` in the 3D Viewport and open the **THREN** sidebar tab. Enter a **File Name**, such as `SM_Lantern`, for the combined FBX and Static Mesh. The first selected mesh alphabetically supplies the pivot, persistent ID and default file name.
-4. Pick **Shared** or **WitchLair** and check the displayed destination. Leave **Prop Folder** blank to use the FBX name without `SM_`.
-5. Click **Push to Unreal**. Save the Blender file again after the first push to persist the object's THREN ID. For later pushes, keep the same first mesh alphabetically, export name and destination.
+3. Press `N` in the 3D Viewport and open the **THREN** sidebar tab.
+4. Pick **Shared**, **WitchLair**, or **Forest** to set the base directory. Use **Select Directory** to choose a different base anywhere under `/Content/THREN/`.
+5. Enter a **Folder Name** to import into `<base>/<folder_name>/Meshes`. Leave it blank to use `<base>/Meshes`. If the base is already named `Meshes`, the push uses it directly.
+6. Click **Push to Unreal**. Save the Blender file again after the first push to persist each object's THREN ID. For later pushes, keep each object's name and destination the same.
 
-Use letters, digits and underscores for the export name and prop folder. The exporter replaces unsupported characters in material slot names with underscores.
+Use letters, digits and underscores in the prop folder. The exporter replaces unsupported characters in object and material slot names with underscores.
 
 
 ---

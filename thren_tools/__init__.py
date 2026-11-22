@@ -1,7 +1,7 @@
 bl_info = {
     "name": "THREN Tools",
     "author": "MatthieuHernandez",
-    "version": (1, 0, 8),
+    "version": (1, 1, 0),
     "blender": (5, 3, 0),
     "location": "View3D > Sidebar > THREN",
     "description": "Export low/high FBX files and push Static Meshes to Unreal",

@@ -22,12 +22,12 @@ class VIEW3D_PT_thren_tools(bpy.types.Panel):
 
         push = self.layout.box()
         push.label(text=push_to_unreal.EXPORT_OT_thren_push_to_unreal.bl_label)
-        push.prop(scene, "thren_push_filename")
         push.prop(scene, "thren_destination")
-        if scene.thren_destination == 'WITCH_LAIR':
-            push.prop(scene, "thren_prop_folder")
+        _, _, folder_property = push_to_unreal.DESTINATIONS[scene.thren_destination]
+        push.prop(scene, folder_property)
+        push.operator("thren.select_unreal_directory", icon='FILE_FOLDER')
         try:
-            folder = push_to_unreal.destination_folder(scene, push_to_unreal.push_name(context))
+            folder = push_to_unreal.content_path(push_to_unreal.destination_folder(scene))
         except ValueError as error:
             push.label(text=str(error), icon='ERROR')
         else:
